@@ -6,9 +6,9 @@ from torch.utils.data import Dataset
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
-
+from PIL import Image
 class MedicalImageDataset(Dataset):
-    def __init__(self, root, transforms=None):
+    def __init__(self, root, transforms=None,sam_dataset = True):
         """
         Args:
             root (str): Path to the dataset root folder containing 'images/' and 'labels/'.
@@ -22,6 +22,8 @@ class MedicalImageDataset(Dataset):
         
         assert len(self.image_filenames) == len(self.label_filenames), "Mismatch between images and labels."
         self.transforms = transforms
+        
+        self.sam_dataset = sam_dataset
 
     def __len__(self):
         return len(self.image_filenames)
@@ -43,6 +45,10 @@ class MedicalImageDataset(Dataset):
             augmented = self.transforms(image=image, mask=label)
             image = augmented['image']
             label = augmented['mask']
+        
+        if self.sam_dataset : 
+            image = Image.fromarray((image.permute(1,2,0).numpy()).astype(np.uint8))
+        label = Image.fromarray((label.numpy()).astype(np.uint8))
 
         return image, label
 
