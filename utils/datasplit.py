@@ -1,8 +1,16 @@
-from sklearn.model_selection import train_test_split
-import json
 import os
+from sklearn.model_selection import train_test_split
+from typing import Union
+import json
 
-def split_data(data_path, data_ratio = [0.70, 0.15, 0.15]):
+def split_data(data_path: str, data_ratio: Union[list, tuple] = [0.70, 0.15, 0.15]):
+    '''
+        This function is for splitting data to train, validation, and test sets.
+        Args:
+            data_path: Path to your data
+            data_ratio: the ratio to splite your data to different sets
+
+    '''
     data = os.listdir(data_path)
 
     train_data, temp_data = train_test_split(data,
