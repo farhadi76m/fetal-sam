@@ -37,12 +37,10 @@ class MedicalImageDataset(Dataset):
         return len(self.image_filenames)
 
     def __getitem__(self, idx):
-        if os.path.isabs(image_path):
-            image_path = os.path.relpath(image_path, "/")
-        if os.path.isabs(label_path):
-            label_path = os.path.relpath(label_path, "/")
-        image_path = os.path.join(self.root, self.image_filenames[idx])
-        label_path = os.path.join(self.root, self.label_filenames[idx])
+        image_path = os.path.relpath(self.image_filenames[idx], "/")
+        label_path = os.path.relpath(self.label_filenames[idx], "/")
+        image_path = os.path.join(self.root, image_path)
+        label_path = os.path.join(self.root, label_path)
 
         # Read image and label
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
