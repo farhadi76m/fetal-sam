@@ -111,12 +111,13 @@ class SAMSegmentationDataset(Dataset):
         self.transform = transform
         
     def generate_point_prompt(self, mask):
-        """Generate point prompts from segmentation mask"""
-        # Get random point from each class
+        """Generate point prompts from segmentation mask with fixed number of points"""
+        num_points = 4  # One point per class (including background)
         points = []
         point_labels = []
         
-        for class_id in range(4):  # For 4 classes
+        # Add one point for each class (0,1,2,3)
+        for class_id in range(4):
             class_mask = (mask == class_id)
             if class_mask.any():
                 # Get indices where class is present
@@ -124,7 +125,11 @@ class SAMSegmentationDataset(Dataset):
                 # Random point selection
                 random_idx = np.random.randint(0, len(y_indices))
                 points.append([x_indices[random_idx], y_indices[random_idx]])
-                point_labels.append(1)  # 1 for foreground
+                point_labels.append(1 if class_id > 0 else 0)  # 0 for background, 1 for foreground
+            else:
+                # If class not present, add a dummy point
+                points.append([0, 0])  # dummy coordinates
+                point_labels.append(0)  # mark as background
         
         return np.array(points), np.array(point_labels)
     
@@ -153,20 +158,18 @@ class SAMSegmentationDataset(Dataset):
         if isinstance(label, Image.Image):
             label = np.array(label)
         
-        # Generate prompts
+        # Generate prompts with fixed size
         points, point_labels = self.generate_point_prompt(label)
-        boxes = self.generate_box_prompt(label)
         
         # Prepare image for SAM (normalize to [0, 1])
         image = image.astype(np.float32) / 255.0
         
-        # Create sample dict
+        # Create sample dict with consistent tensor shapes
         sample = {
             'image': torch.from_numpy(image).permute(2, 0, 1),  # Convert to CxHxW
             'label': torch.from_numpy(label).long(),
-            'point_coords': torch.from_numpy(points).float(),
-            'point_labels': torch.from_numpy(point_labels).long(),
-            'boxes': torch.from_numpy(boxes).float(),
+            'point_coords': torch.from_numpy(points).float(),  # Will be (4, 2)
+            'point_labels': torch.from_numpy(point_labels).long(),  # Will be (4,)
             'original_size': image.shape[:2]
         }
         
@@ -174,7 +177,6 @@ class SAMSegmentationDataset(Dataset):
             sample = self.transform(sample)
             
         return sample
-
     def __len__(self):
         return len(self.dataset)
 # s_dtaset = SAMSegmentationDataset(dataset)
