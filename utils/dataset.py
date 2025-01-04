@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import json 
 class MedicalImageDataset(Dataset):
-    def __init__(self, root, split = 'train', transforms=None,sam_dataset = True):
+    def __init__(self, root, split = 'train', transforms=None,sam_dataset = True, target_size = (512, 512)):
         """
         Args:
             root (str): Path to the dataset root folder containing 'images/' and 'labels/'.
@@ -18,7 +18,8 @@ class MedicalImageDataset(Dataset):
         data_list = os.path.join(root, 'dataset.json')
         with open(data_list, 'r') as f : 
             json_list = json.load(f)
-            
+         
+        self.target_size = target_size   
         # self.image_dir = os.path.join(root, 'images')
         # self.label_dir = os.path.join(root, 'labels')
         self.root = root
@@ -45,6 +46,11 @@ class MedicalImageDataset(Dataset):
         # Read image and label
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
         label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
+        
+        # Resize image and label 
+        image = cv2.resize(image, self.target_size, interpolation=cv2.INTER_LINEAR)  # Use INTER_LINEAR for smooth resizing
+        label = cv2.resize(label, self.target_size, interpolation=cv2.INTER_NEAREST)  # Use INTER_NEAREST for segmentation masks or labels
+
 
         # Convert grayscale labels to single-channel if necessary
         if len(label.shape) == 3:
