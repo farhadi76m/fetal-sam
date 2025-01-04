@@ -92,3 +92,90 @@ class SAMDataset(Dataset):
         return inputs
 
 
+import torch
+from torch.utils.data import Dataset
+import numpy as np
+from PIL import Image
+import cv2
+
+class SAMSegmentationDataset(Dataset):
+    def __init__(self, original_dataset, transform=None):
+        """
+        Adapts a regular segmentation dataset for SAM training
+        
+        Args:
+            original_dataset: Your original dataset that returns (image, label) pairs
+            transform: Optional transforms to be applied
+        """
+        self.dataset = original_dataset
+        self.transform = transform
+        
+    def generate_point_prompt(self, mask):
+        """Generate point prompts from segmentation mask"""
+        # Get random point from each class
+        points = []
+        point_labels = []
+        
+        for class_id in range(4):  # For 4 classes
+            class_mask = (mask == class_id)
+            if class_mask.any():
+                # Get indices where class is present
+                y_indices, x_indices = np.where(class_mask)
+                # Random point selection
+                random_idx = np.random.randint(0, len(y_indices))
+                points.append([x_indices[random_idx], y_indices[random_idx]])
+                point_labels.append(1)  # 1 for foreground
+        
+        return np.array(points), np.array(point_labels)
+    
+    def generate_box_prompt(self, mask):
+        """Generate bounding box prompts from segmentation mask"""
+        boxes = []
+        
+        for class_id in range(4):
+            class_mask = (mask == class_id)
+            if class_mask.any():
+                # Find bounding box coordinates
+                y_indices, x_indices = np.where(class_mask)
+                x_min, x_max = np.min(x_indices), np.max(x_indices)
+                y_min, y_max = np.min(y_indices), np.max(y_indices)
+                boxes.append([x_min, y_min, x_max, y_max])
+        
+        return np.array(boxes)
+
+    def __getitem__(self, idx):
+        # Get original image and label
+        image, label = self.dataset[idx]
+        
+        # Convert PIL to numpy if necessary
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        if isinstance(label, Image.Image):
+            label = np.array(label)
+        
+        # Generate prompts
+        points, point_labels = self.generate_point_prompt(label)
+        boxes = self.generate_box_prompt(label)
+        
+        # Prepare image for SAM (normalize to [0, 1])
+        image = image.astype(np.float32) / 255.0
+        
+        # Create sample dict
+        sample = {
+            'image': torch.from_numpy(image).permute(2, 0, 1),  # Convert to CxHxW
+            'label': torch.from_numpy(label).long(),
+            'point_coords': torch.from_numpy(points).float(),
+            'point_labels': torch.from_numpy(point_labels).long(),
+            'boxes': torch.from_numpy(boxes).float(),
+            'original_size': image.shape[:2]
+        }
+        
+        if self.transform:
+            sample = self.transform(sample)
+            
+        return sample
+
+    def __len__(self):
+        return len(self.dataset)
+# s_dtaset = SAMSegmentationDataset(dataset)
+# s_dtaset[3000]

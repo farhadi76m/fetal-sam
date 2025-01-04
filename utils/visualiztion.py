@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-
+from PIL import image
 def plot_segmentation_subplots(dataset, indices, class_labels=None, alpha=0.5, nrows=3, ncols=4):
     """
     Plot a grid of images with transparent overlays of segmentation ground truth.
@@ -80,3 +80,85 @@ def plot_segmentation_subplots(dataset, indices, class_labels=None, alpha=0.5, n
 
     plt.tight_layout()
     plt.show()
+
+
+def visualize_sam_data(sample, figsize=(15, 5)):
+    """
+    Visualize SAM dataset sample including image, mask, and prompts
+    
+    Args:
+        sample: Dictionary containing:
+            - image: torch.Tensor (C, H, W)
+            - label: torch.Tensor (H, W)
+            - point_coords: torch.Tensor (N, 2)
+            - point_labels: torch.Tensor (N)
+            - boxes: torch.Tensor (M, 4) [optional]
+    """
+    # Convert tensors to numpy arrays
+    image = sample['image'].permute(1, 2, 0).numpy()  # Convert to HWC format
+    mask = sample['label'].numpy()
+    points = sample['point_coords'].numpy()
+    point_labels = sample['point_labels'].numpy()
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    
+    # Plot original image
+    axes[0].imshow(image)
+    axes[0].set_title('Original Image')
+    axes[0].axis('off')
+    
+    # Plot segmentation mask
+    mask_colors = plt.cm.rainbow(np.linspace(0, 1, 4))  # Different color for each class
+    colored_mask = mask_colors[mask]
+    axes[1].imshow(colored_mask[:, :, :3])  # Remove alpha channel
+    axes[1].set_title('Segmentation Mask')
+    axes[1].axis('off')
+    
+    # Plot image with prompt points
+    axes[2].imshow(image)
+    
+    # Plot points with different colors for foreground/background
+    for i, (point, label) in enumerate(zip(points, point_labels)):
+        color = 'red' if label == 1 else 'blue'  # red for foreground, blue for background
+        axes[2].scatter(point[0], point[1], c=color, s=100)
+        axes[2].text(point[0]+5, point[1]+5, f'Point {i}', color=color)
+    
+    # Plot boxes if they exist
+    if 'boxes' in sample and len(sample['boxes']) > 0:
+        boxes = sample['boxes'].numpy()
+        for box in boxes:
+            x1, y1, x2, y2 = box
+            width = x2 - x1
+            height = y2 - y1
+            rect = plt.Rectangle((x1, y1), width, height, 
+                               fill=False, color='green', linewidth=2)
+            axes[2].add_patch(rect)
+    
+    axes[2].set_title('Prompts Visualization')
+    axes[2].axis('off')
+    
+    # Add legend
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', 
+                  markerfacecolor='red', markersize=10, label='Foreground Point'),
+        plt.Line2D([0], [0], marker='o', color='w', 
+                  markerfacecolor='blue', markersize=10, label='Background Point')
+    ]
+    if 'boxes' in sample and len(sample['boxes']) > 0:
+        legend_elements.append(
+            plt.Line2D([0], [0], color='green', label='Bounding Box')
+        )
+    axes[2].legend(handles=legend_elements, loc='upper right')
+    
+    # Add class legend for mask
+    class_names = ['Background', 'Class A', 'Class B', 'Class C']
+    legend_elements = [
+        plt.Line2D([0], [0], color='w', markerfacecolor=mask_colors[i][:3], 
+                  marker='s', markersize=10, label=name)
+        for i, name in enumerate(class_names)
+    ]
+    axes[1].legend(handles=legend_elements, loc='upper right')
+    
+    plt.tight_layout()
+    return fig
