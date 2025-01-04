@@ -47,8 +47,8 @@ class MedicalImageDataset(Dataset):
             label = augmented['mask']
         
         if self.sam_dataset : 
-            image = Image.fromarray((image.permute(1,2,0).numpy()).astype(np.uint8))
-        label = Image.fromarray((label.numpy()).astype(np.uint8))
+            image = Image.fromarray(image)
+        label = Image.fromarray((label).astype(np.uint8))
 
         return image, label
 
