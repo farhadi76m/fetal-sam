@@ -19,9 +19,9 @@ class MedicalImageDataset(Dataset):
         with open(data_list, 'r') as f : 
             json_list = json.load(f)
             
-        self.image_dir = os.path.join(root, 'images')
-        self.label_dir = os.path.join(root, 'labels')
-        
+        # self.image_dir = os.path.join(root, 'images')
+        # self.label_dir = os.path.join(root, 'labels')
+        self.root = root
         assert split in ['train', 'test', 'validation']
         self.image_filenames = [item["image"] for item in json_list[split]]
         # self.image_filenames = sorted(os.listdir(self.image_dir))
@@ -37,8 +37,8 @@ class MedicalImageDataset(Dataset):
         return len(self.image_filenames)
 
     def __getitem__(self, idx):
-        image_path = os.path.join(self.image_dir, self.image_filenames[idx])
-        label_path = os.path.join(self.label_dir, self.label_filenames[idx])
+        image_path = os.path.join(self.root, self.image_filenames[idx])
+        label_path = os.path.join(self.root, self.label_filenames[idx])
 
         # Read image and label
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
