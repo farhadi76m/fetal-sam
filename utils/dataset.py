@@ -7,18 +7,26 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 from PIL import Image
+import json 
 class MedicalImageDataset(Dataset):
-    def __init__(self, root, transforms=None,sam_dataset = True):
+    def __init__(self, root, split = 'train', transforms=None,sam_dataset = True):
         """
         Args:
             root (str): Path to the dataset root folder containing 'images/' and 'labels/'.
             transforms (albumentations.Compose, optional): Transformations to apply to images and labels.
         """
+        data_list = os.path.join(root, 'dataset.json')
+        with open(data_list, 'r') as f : 
+            json_list = json.load(f)
+            
         self.image_dir = os.path.join(root, 'images')
         self.label_dir = os.path.join(root, 'labels')
         
-        self.image_filenames = sorted(os.listdir(self.image_dir))
-        self.label_filenames = [lbl for lbl in sorted(os.listdir(self.label_dir)) if lbl.endswith('_gtFine_labelIds.png')]
+        assert split in ['train', 'test', 'validation']
+        self.image_filenames = [item["image"] for item in json_list[split]]
+        # self.image_filenames = sorted(os.listdir(self.image_dir))
+        self.label_filenames = [item["label"]["labelIds"] for item in json_list[split]]
+        # self.label_filenames = [lbl for lbl in sorted(os.listdir(self.label_dir)) if lbl.endswith('_gtFine_labelIds.png')]
         
         assert len(self.image_filenames) == len(self.label_filenames), "Mismatch between images and labels."
         self.transforms = transforms
