@@ -1,8 +1,8 @@
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import SamProcessor
-# Function to pad bounding boxes
-def pad_bounding_boxes(bounding_boxes, max_boxes=4):
+
+def pad_bounding_boxes(bounding_boxes: list, max_boxes: int=4) -> list:
     """
     Pad or truncate the list of bounding boxes to a fixed size.
 
