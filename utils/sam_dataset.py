@@ -20,8 +20,9 @@ def pad_bounding_boxes(bounding_boxes: list, max_boxes: int=4) -> list:
         padded_boxes[i] = list(map(float, bounding_boxes[i]))  # Ensure float conversion
 
     return padded_boxes
+
 # Function to get bounding boxes for each class
-def get_bounding_boxes(ground_truth_map, num_classes=3):
+def get_bounding_boxes(ground_truth_map: np.ndarray, num_classes: int=3):
     """
     Get bounding boxes for each class in the segmentation mask.
 
@@ -53,7 +54,7 @@ def get_bounding_boxes(ground_truth_map, num_classes=3):
 
 
 class SAMDataset(Dataset):
-    def __init__(self, dataset, processor, num_classes=3):
+    def __init__(self, dataset:list, processor:SamProcessor, num_classes:int=3):
         """
         Dataset class for SAM with bounding box prompts for multi-class segmentation.
 
@@ -76,10 +77,8 @@ class SAMDataset(Dataset):
 
         # Get bounding boxes for all classes
         prompts = get_bounding_boxes(ground_truth_mask, self.num_classes)
-        # print(type(prompts))
         prompts = pad_bounding_boxes(prompts, 3)
-        # print('OOOOOOOOOOOOOOOOOO')
-        # print(type(prompts))
+
         # Prepare image and bounding boxes for the model
         inputs = self.processor(image, input_boxes=[prompts], return_tensors="pt")
 
@@ -94,9 +93,7 @@ class SAMDataset(Dataset):
 
 import torch
 from torch.utils.data import Dataset
-import numpy as np
 from PIL import Image
-import cv2
 
 class SAMSegmentationDataset(Dataset):
     def __init__(self, original_dataset, transform=None):
