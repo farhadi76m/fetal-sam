@@ -16,7 +16,7 @@ class MedicalImageDataset(Dataset):
         split: str = "train",
         transforms: Optional[A.Compose] = None,
         sam_dataset: bool = True,
-        target_size: tuple[int, int] = (512, 512),
+        target_size: tuple[int, int] = (256, 256),
     ):
         """
         Args:
