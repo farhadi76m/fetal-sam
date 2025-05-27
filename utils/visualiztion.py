@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from PIL import image
+from PIL import Image
 def plot_segmentation_subplots(dataset, indices, class_labels=None, alpha=0.5, nrows=3, ncols=4):
     """
     Plot a grid of images with transparent overlays of segmentation ground truth.
@@ -121,6 +121,10 @@ def visualize_sam_data(sample, figsize=(15, 5)):
     # Plot points with different colors for foreground/background
     for i, (point, label) in enumerate(zip(points, point_labels)):
         color = 'red' if label == 1 else 'blue'  # red for foreground, blue for background
+
+        # point_colors = ['blue', 'red', 'green', 'orange']
+        # color = point_colors[label] if 0 <= label < len(point_colors) else 'gray'
+
         axes[2].scatter(point[0], point[1], c=color, s=100)
         axes[2].text(point[0]+5, point[1]+5, f'Point {i}', color=color)
     
@@ -162,3 +166,21 @@ def visualize_sam_data(sample, figsize=(15, 5)):
     
     plt.tight_layout()
     return fig
+
+
+if  __name__ == "__main__":
+    from dataset import MedicalImageDataset
+    from sam_dataset import SAMSegmentationDataset
+
+    # Load original dataset (with transformations)
+    original_dataset = MedicalImageDataset(
+        root="data/segmentation",
+        transforms=None
+    )
+
+    sam_dataset = SAMSegmentationDataset(original_dataset)
+    
+    indices = list(range(12))  # Choose 12 samples
+    class_labels = ['Background', 'Brain', 'CSP', 'LV']  # Adjust if needed
+
+    plot_segmentation_subplots(original_dataset, indices, class_labels)
