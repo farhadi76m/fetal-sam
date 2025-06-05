@@ -2,6 +2,7 @@ import os
 from typing import Optional
 import cv2
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -62,17 +63,20 @@ class MedicalImageDataset(Dataset):
         if image is None or label is None:
             raise FileNotFoundError(f"Failed to load {image_path} or {label_path}")
 
+        if label.ndim == 3:
+            label = label[..., 0]  # If accidentally 3D, take first channel
+
+        original_size = image.shape[:2]                         # (H, W)
+
         # Resize image and label
         image = cv2.resize(
             image, self.target_size, interpolation=cv2.INTER_LINEAR
         )  # Use INTER_LINEAR for smooth resizing
-        label = cv2.resize(
-            label, self.target_size, interpolation=cv2.INTER_NEAREST
-        )  # Use INTER_NEAREST for segmentation masks or labels
 
-        # Convert grayscale labels to single-channel if necessary
-        if len(label.shape) == 3:
-            label = label[..., 0]
+        # Convert to float and normalize
+        pixel_mean = np.array([123.675, 116.28, 103.53])
+        pixel_std = np.array([58.395, 57.12, 57.375])
+        image_norm = (image.astype(np.float32) - pixel_mean) / pixel_std
 
         # Apply transformations
         if self.transforms:
@@ -80,11 +84,12 @@ class MedicalImageDataset(Dataset):
             image = augmented["image"]
             label = augmented["mask"]
 
-        if self.sam_dataset:
-            image = Image.fromarray(image)
-        label = Image.fromarray((label).astype(np.uint8))
+        # Convert to torch tensor [3, H, W]
+        image_tensor = torch.from_numpy(image_norm).permute(2, 0, 1).float()
 
-        return image, label
+        return {"image": image,
+                "label": label,
+                "original_size": original_size}, 
 
 
 if __name__ == "__main__":

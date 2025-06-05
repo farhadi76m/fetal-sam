@@ -58,7 +58,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 class SAMSegmentationDataset(Dataset):
-    def __init__(self, original_dataset, transform=None):
+    def __init__(self, original_dataset, prompt_type:str, model_input_size:tuple, transform=None, ):
         """
         Adapts a regular segmentation dataset for SAM training
         
@@ -67,13 +67,21 @@ class SAMSegmentationDataset(Dataset):
             transform: Optional transforms to be applied
         """
         self.dataset = original_dataset
+        assert prompt_type in {"point", "box"}, "Input must be 'point' or 'box'"
+        self.prompt_type = prompt_type
+        self.model_input_size = model_input_size
         self.transform = transform
         
-    def generate_point_prompt(self, mask):
+    def generate_point_prompt(self, mask, model_input_size, original_size):
         """Generate point prompts from segmentation mask with fixed number of points"""
-        num_points = 4  # One point per class (including background)
+        # num_points = self.num_classes  # One point per class (including background)
+        num_points = np.unique(mask)  # One point per class (including background)
         points = []
         point_labels = []
+
+        # Adjust for resized image:
+        h_scale = model_input_size / original_size[0]
+        w_scale = model_input_size / original_size[1]
         
         # Add one point for each class (1,2,3)
         for class_id in range(num_points):
@@ -83,60 +91,82 @@ class SAMSegmentationDataset(Dataset):
                 y_indices, x_indices = np.where(class_mask)
                 # Random point selection
                 random_idx = np.random.randint(0, len(y_indices))
-                points.append([x_indices[random_idx], y_indices[random_idx]])
+                point = np.array([[x_indices[random_idx], y_indices[random_idx]]], dtype=np.float32)  # [[x, y]]
+                point = np.array([[point[0,0] * w_scale, point[0,1] * h_scale]], dtype=np.float32)
+                points.append(point)
                 point_labels.append(1 if class_id > 0 else 0)  # 0 for background, 1 for foreground
                 # point_labels.append(class_id)  # true class label
             else:
                 # If class not present, add a dummy point
-                points.append([-1, -1])
+                points.append(np.array([[-1, -1]]))
                 point_labels.append(-1)  # Mark as invalid ! Later mask them in loss calculation.
 
-        return np.array(points), np.array(point_labels)
+        return points, np.array(point_labels)
     
     def generate_box_prompt(self, mask):
         """Generate bounding box prompts from segmentation mask"""
+        classes = np.unique(mask)  # One point per class (including background)
         boxes = []
         
-        for class_id in range(4):
+        for class_id in classes[0:]:
             class_mask = (mask == class_id)
             if class_mask.any():
                 # Find bounding box coordinates
                 y_indices, x_indices = np.where(class_mask)
                 x_min, x_max = np.min(x_indices), np.max(x_indices)
                 y_min, y_max = np.min(y_indices), np.max(y_indices)
-                boxes.append([x_min, y_min, x_max, y_max])
+                boxes.append([x_min, y_min, x_max, y_max], dtype=np.float32)  # [x0, y0, x1, y1]
         
         return np.array(boxes)
 
+    def resize_box(box, orig_shape, new_shape):
+        # box: [x_min, y_min, x_max, y_max]
+        h_scale = new_shape[0] / orig_shape[0]
+        w_scale = new_shape[1] / orig_shape[1]
+        x_min, y_min, x_max, y_max = box
+        return np.array([
+            x_min * w_scale, y_min * h_scale,
+            x_max * w_scale, y_max * h_scale
+        ], dtype=np.float32)
+
     def __getitem__(self, idx):
         # Get original image and label
-        image, label = self.dataset[idx]
+        data = self.dataset[idx]
         
-        # Convert PIL to numpy if necessary
-        if isinstance(image, Image.Image):
-            image = np.array(image)
-        if isinstance(label, Image.Image):
-            label = np.array(label)
+        # # Convert PIL to numpy if necessary
+        # if isinstance(data["image"], Image.Image):
+        #     image = np.array(image)
+        # if isinstance(data["label"], Image.Image):
+        #     label = np.array(label)
         
-        # Generate prompts with fixed size
-        points, point_labels = self.generate_point_prompt(label)
-        
-        # Prepare image for SAM (normalize to [0, 1])
-        image = image.astype(np.float32) / 255.0
-        
-        # Create sample dict with consistent tensor shapes
-        sample = {
-            'image': torch.from_numpy(image).permute(2, 0, 1),  # Convert to CxHxW
-            'label': torch.from_numpy(label).long(),
-            'point_coords': torch.from_numpy(points).float(),  # Will be (4, 2)
-            'point_labels': torch.from_numpy(point_labels).long(),  # Will be (4,)
-            'original_size': image.shape[:2]
-        }
+        # Generate prompts
+        if self.prompt_type == 'point':
+            points, point_labels = self.generate_point_prompt(data["label"], self.model_input_size, data["original_size"])
+            sample = [{
+                "image": data["image"],  # [3, H, W], already normalized/resized
+                "original_size": data["original_size"],  # (H, W)
+                "point_coords": torch.from_numpy(points).unsqueeze(0),  # [1, N, 2]
+                "point_labels": torch.from_numpy(point_labels).unsqueeze(0),          # [1, N]
+            }]
+        else:
+            # 1. Get box in original image
+            box = self.get_bbox_from_mask(data["label"])
+
+            # 2. Rescale to model input
+            box_resized = self.resize_box(box, orig_shape=data["original_size"], new_shape=self.model_input_size)
+            box_tensor = torch.from_numpy(box_resized).unsqueeze(0).unsqueeze(0)  # [1, 1, 4]
+
+            sample = [{
+                    "image": data["image"],  # [3, H, W]
+                    "original_size": data["original_size"],  # (H, W)
+                    "boxes": box_tensor.float(),     # [1, 1, 4]
+                    # No "point_coords" or "point_labels" needed
+                }]
         
         if self.transform:
             sample = self.transform(sample)
             
-        return sample
+        return sample, data["label"]
     def __len__(self):
         return len(self.dataset)
 # s_dtaset = SAMSegmentationDataset(dataset)
