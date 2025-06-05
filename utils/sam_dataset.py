@@ -1,8 +1,8 @@
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import SamProcessor
-# Function to pad bounding boxes
-def pad_bounding_boxes(bounding_boxes, max_boxes=4):
+
+def pad_bounding_boxes(bounding_boxes: list, max_boxes: int=4) -> list:
     """
     Pad or truncate the list of bounding boxes to a fixed size.
 
@@ -20,8 +20,9 @@ def pad_bounding_boxes(bounding_boxes, max_boxes=4):
         padded_boxes[i] = list(map(float, bounding_boxes[i]))  # Ensure float conversion
 
     return padded_boxes
+
 # Function to get bounding boxes for each class
-def get_bounding_boxes(ground_truth_map, num_classes=3):
+def get_bounding_boxes(ground_truth_map: np.ndarray, num_classes: int=3):
     """
     Get bounding boxes for each class in the segmentation mask.
 
@@ -52,51 +53,9 @@ def get_bounding_boxes(ground_truth_map, num_classes=3):
     return bounding_boxes
 
 
-class SAMDataset(Dataset):
-    def __init__(self, dataset, processor, num_classes=3):
-        """
-        Dataset class for SAM with bounding box prompts for multi-class segmentation.
-
-        Args:
-            dataset (list): List of dictionaries with 'image' and 'label' keys.
-            processor (SamProcessor): SAM processor for preparing inputs.
-            num_classes (int): Number of segmentation classes.
-        """
-        self.dataset = dataset
-        self.processor = processor
-        self.num_classes = num_classes
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        item = self.dataset[idx]
-        image = item[0]
-        ground_truth_mask = np.array(item[1])
-
-        # Get bounding boxes for all classes
-        prompts = get_bounding_boxes(ground_truth_mask, self.num_classes)
-        # print(type(prompts))
-        prompts = pad_bounding_boxes(prompts, 3)
-        # print('OOOOOOOOOOOOOOOOOO')
-        # print(type(prompts))
-        # Prepare image and bounding boxes for the model
-        inputs = self.processor(image, input_boxes=[prompts], return_tensors="pt")
-
-        # Remove batch dimension which the processor adds by default
-        inputs = {k: v.squeeze(0) for k, v in inputs.items()}
-
-        # Add ground truth segmentation
-        inputs["ground_truth_mask"] = ground_truth_mask
-
-        return inputs
-
-
 import torch
 from torch.utils.data import Dataset
-import numpy as np
 from PIL import Image
-import cv2
 
 class SAMSegmentationDataset(Dataset):
     def __init__(self, original_dataset, transform=None):
@@ -116,8 +75,8 @@ class SAMSegmentationDataset(Dataset):
         points = []
         point_labels = []
         
-        # Add one point for each class (0,1,2,3)
-        for class_id in range(4):
+        # Add one point for each class (1,2,3)
+        for class_id in range(num_points):
             class_mask = (mask == class_id)
             if class_mask.any():
                 # Get indices where class is present
@@ -126,11 +85,12 @@ class SAMSegmentationDataset(Dataset):
                 random_idx = np.random.randint(0, len(y_indices))
                 points.append([x_indices[random_idx], y_indices[random_idx]])
                 point_labels.append(1 if class_id > 0 else 0)  # 0 for background, 1 for foreground
+                # point_labels.append(class_id)  # true class label
             else:
                 # If class not present, add a dummy point
-                points.append([0, 0])  # dummy coordinates
-                point_labels.append(0)  # mark as background
-        
+                points.append([-1, -1])
+                point_labels.append(-1)  # Mark as invalid ! Later mask them in loss calculation.
+
         return np.array(points), np.array(point_labels)
     
     def generate_box_prompt(self, mask):
