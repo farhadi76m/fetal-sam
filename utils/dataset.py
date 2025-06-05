@@ -27,8 +27,8 @@ class MedicalImageDataset(Dataset):
 
         assert split in ["train", "test", "validation"]
 
-        self.image_filenames: list = []
-        self.label_filenames: list = []
+        self.image_filenames = []
+        self.label_filenames = []
 
         data_list = os.path.join(root, "dataset.json")
         with open(data_list, "r") as f:
@@ -58,6 +58,9 @@ class MedicalImageDataset(Dataset):
         # Read image and label
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
         label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
+
+        if image is None or label is None:
+            raise FileNotFoundError(f"Failed to load {image_path} or {label_path}")
 
         # Resize image and label
         image = cv2.resize(
